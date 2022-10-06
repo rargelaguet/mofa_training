@@ -1,0 +1,87 @@
+---
+title: "Principal Component Analysis: Tea Pot example"
+author: 
+  name: "Ricard Argelaguet"
+  affiliation: "European Bioinformatics Institute, Cambridge, UK"
+  email: "ricard@ebi.ac.uk"
+date: "`r Sys.Date()`"
+output:
+  BiocStyle::html_document:
+    toc: false
+---
+
+Data downloaded from https://www.khanacademy.org/computer-programming/3d-teapot/971436783
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(rgl))
+suppressPackageStartupMessages(library(ggplot2))
+
+setwd("/Users/argelagr/Google\ Drive/My\ Drive/Teaching/MSC_UPF_multiomics_May2021/pca_vignette/3d_teapot")
+```
+
+```{r}
+options(rgl.printRglwidget = TRUE)
+```
+
+Load 3D teapot data
+```{r}
+teapot <- read.csv("teapot.csv", header = TRUE) %>% as.matrix
+head(teapot)
+dim(teapot)
+```
+
+Interactive 3D Scatterplot
+```{r}
+# open3d()
+# bg3d("white")
+# # par3d(windowRect = c(20, 30, 800, 800))
+# pch3d(x = teapot[,1], y = teapot[,2], z = teapot[,3], col="black",
+#       cex=0.5, lwd = 0.5, box = FALSE, pch=21, bg="grey", axes = TRUE,
+#        xlab = "", ylab = "", zlab = "", main = "")
+
+# start <- proc.time()[3]
+# while ((i <- 10*(proc.time()[3] - start)) < 360) {
+#   # rgl.viewpoint(theta=i, phi=i/4); 
+#   rgl.viewpoint(theta=i) 
+# }
+```
+
+```{r}
+open3d()
+bg3d("white")
+pch3d(x = teapot[,1], y = teapot[,2], z = teapot[,3], col="black",
+      cex=0.5, lwd = 0.5, box = FALSE, pch=21, bg="grey", axes = TRUE,
+       xlab = "", ylab = "", zlab = "", main = "")
+```
+
+Run PCA
+```{r}
+# Build the covariance matrix S
+S <- cov(teapot)
+
+# Calculate eigenvectors-eigenvalue pairs of the covariance matrix
+eigenval <- eigen(S)$values
+eigenvec <- eigen(S)$vectors
+```
+
+Print the amount of variance that each PC captures
+```{r}
+eigenval
+```
+
+Calculate the fraction of variance each eigenvector captures (as a fraction of the total variance)?
+```{r}
+cumsum(eigenval/sum(eigenval))
+```
+
+Plot data mapped onto the two top PCs
+```{r}
+# Project samples onto PC space
+PCs <- teapot %*% eigenvec[,1:2] 
+
+# Plot PC1 vs PC2
+plot(PCs, ylim = c(50, -55), pch = 21, cex=2.5, lwd = 1, bg="grey", col= "black", 
+     xlab = "", ylab = "", main = "Teapot in 2D")
+```
+

@@ -1,0 +1,102 @@
+---
+title: "Principal Component Analysis for image compression"
+author: 
+  name: "Ricard Argelaguet"
+  affiliation: "European Bioinformatics Institute, Cambridge, UK"
+  email: "ricard@ebi.ac.uk"
+date: "`r Sys.Date()`"
+output:
+  BiocStyle::html_document:
+    toc: false
+---
+
+In this vignette we will demonstrate how PCA can be used for data compression in the field of image processing. We will use the [photo of Lena Forsen](https://en.wikipedia.org/wiki/Lenna).
+
+# Load the libraries
+
+```{r, message = FALSE}
+library(tidyverse)
+library(grid)
+library(png)
+```
+
+Change the working directory
+```{r}
+setwd("/Users/argelagr/Google\ Drive/My\ Drive/Teaching/MSC_UPF_multiomics_May2021/pca_vignette/image_compression")
+```
+
+# Load the data
+
+Load PNG using the readPNG function from the `png` package
+```{r}
+Y <- readPNG("lena.png") %>% .[100:400,]
+dim(Y)
+```
+
+Plot the original file
+```{r}
+grid.newpage()
+grid.raster(Y)
+```
+
+Save the means for the data reconstruction step later on
+```{r}
+means <- colMeans(Y)
+```
+
+Center the data 
+```{r}
+Y <- Y %>% scale(center=TRUE, scale=FALSE)
+```
+
+# Compute PCA using the eigen decomposition of the covariance matrix
+
+Calculate covariance matrix
+```{r}
+S <- (t(Y)%*%Y) / (nrow(Y)-1)
+```
+
+Calculate the rank 25 [eigendecomposition](https://rpubs.com/aaronsc32/eigenvalues-eigenvectors-r) of the covariance matrix:
+```{r}
+eigenvectors <- eigen(S)$vectors[,1:250]
+dim(eigenvectors) 
+```
+
+Eigenvalues correspond to the standard deviation of the principal components
+```{r}
+eigenvalues <- eigen(S)$values[1:250]
+head(sqrt(eigenvalues))
+```
+
+Multipling the original data by the eigenvectors projects the high-dimensional data onto the low-dimensional space (our principal components)
+```{r}
+PCs <- Y %*% eigenvectors
+dim(PCs)
+```
+
+# Data reconstruction
+
+reconstruct the data using the selected number of PCs
+```{r}
+Ypred <- PCs %*% t(eigenvectors)
+
+# Add the feature means
+Ypred <- sweep(Ypred, MARGIN=2, STATS=means, FUN="+")
+```
+
+Plot
+```{r}
+grid.newpage()
+grid.raster(Ypred)
+```
+
+If the grid.raster does not work in your laptop, you can try save the png file
+```{r}
+# writePNG(Ypred, "lenna_reconstructed.png")
+```
+
+# Questions
+
+- **(Q) How does PCA achieve data compression?**  
+- **(Q) Compare the number of elements that the original matrix has versus the number of elements that are stored in the two matrices that are needed for the PCA representation (weights and factors)** 
+- **(Q) Try to do data compression with 50 principal components. Use the `prcomp(Y)` function. Does the reconstructed image look better?**  

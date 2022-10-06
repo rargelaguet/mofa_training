@@ -1,0 +1,146 @@
+---
+title: "Principal Component Analysis for image compression"
+author: 
+  name: "Ricard Argelaguet"
+  affiliation: "European Bioinformatics Institute, Cambridge, UK"
+  email: "ricard@ebi.ac.uk"
+date: "`r Sys.Date()`"
+output:
+  BiocStyle::html_document:
+    toc: false
+---
+
+In this vignette we will demonstrate how PCA can be used for data compression in the field of image processing. We will use the [famous picture of Lena Forsen](https://en.wikipedia.org/wiki/Lenna).
+
+# Load the libraries
+
+```{r, message = FALSE}
+library(tidyverse)
+library(grid)
+library(png)
+```
+
+```{r}
+setwd("/Users/ricard/Google\ Drive/Teaching/Data_integration_UPF_June2020/pca_vignette/image_compression/")
+```
+
+# Load the data
+
+Load PNG using the readPNG function from the `png` package
+```{r}
+Y <- readPNG("lena.png") %>% .[100:400,]
+```
+
+Plot the original file
+```{r}
+grid.newpage()
+grid.raster(Y)
+```
+
+Save the means for the data reconstruction step later on
+```{r}
+means <- colMeans(Y)
+```
+
+Center the data 
+```{r}
+Y <- Y %>% scale(center=TRUE, scale=FALSE)
+```
+
+# Compute PCA using the eigen decomposition of the covariance matrix
+
+Calculate covariance matrix
+```{r}
+S <- (t(Y)%*%Y) / (nrow(Y)-1)
+```
+
+Calculate the rank 25 [eigendecomposition](https://rpubs.com/aaronsc32/eigenvalues-eigenvectors-r) of the covariance matrix:
+```{r}
+eigenvectors <- eigen(S)$vectors[,1:25]
+dim(eigenvectors) 
+```
+
+Eigenvalues correspond to the standard deviation of the principal components
+```{r}
+eigenvalues <- eigen(S)$values[1:25]
+head(sqrt(eigenvalues))
+```
+
+Multipling the original data by the eigenvectors projects the high-dimensional data onto the low-dimensional space (our principal components)
+```{r}
+PCs <- Y %*% eigenvectors
+dim(PCs)
+```
+
+# Data reconstruction
+
+reconstruct the data using the selected number of PCs
+```{r}
+Ypred <- PCs %*% t(eigenvectors)
+
+# Add the feature means
+Ypred <- sweep(Ypred, MARGIN=2, STATS=means, FUN="+")
+```
+
+Plot
+```{r}
+grid.newpage()
+grid.raster(Ypred)
+```
+
+If the grid.raster does not work in your laptop, you can try save the png file
+```{r}
+writePNG(Ypred, "lenna_reconstructed.png")
+```
+
+# Questions
+
+- **(Q) How does PCA achieve data compression?**  
+- **(Q) Compare the number of elements that the original matrix has versus the number of elements that are stored in the two matrices that are needed for the PCA representation (weights and factors)** 
+- **(Q) Try to do data compression with 50 principal components. Use the `prcomp(Y)` function. Does the reconstructed image look better?**  
+
+# Solutions
+
+### How does PCA achieve data compression?
+
+PCA exploits the redundancy between the features in the input data set to learn a compressed (denoised) representation in terms of a small number of latent variables (principal components).
+
+
+### Compare the number of elements that the original matrix has versus the number of elements that are stored in the two matrices that are needed for the PCA representation (weights and factors)
+
+The original data matrix has dimensions (400,512), this is a total of 500\*512 = 262144 values
+The compressed representation has dimensions (400,PCs) for the principal component matrix and dimensions (512,PCs) for the weight matrix. For 25 PCs, This is a total of (400\*25)+(512*25) = 22800. This is 8% of the amount of information
+
+### Try to do compression with 50 principal components. Use the `prcomp(Y)` function. Does the reconstructed image look better?
+
+Run PCA
+```{r}
+pca <- prcomp(Y)
+Ypred <- pca$x[,c(1:50)] %*% t(pca$rotation[,c(1:50)])
+```
+
+Add feature-wise means
+```{r}
+Ypred <- sweep(Ypred, MARGIN=2, STATS=means, FUN="+")
+```
+
+Plot
+```{r}
+grid.newpage()
+grid.raster(Ypred)
+```
+
+### Plot a curve of the reconstruction error (use absolute values) versus number of principal components 
+
+```{r}
+pca <- prcomp(Y)
+```
+
+```{r}
+error <- rep(NA,50)
+for (i in 1:50) {
+  Ypred <- pca$x[,c(1:i)] %*% t(pca$rotation[,c(1:i)])
+  error[i] <- sum(abs(Y - Ypred))
+}
+plot(error)
+```

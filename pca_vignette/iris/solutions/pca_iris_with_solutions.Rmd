@@ -1,0 +1,210 @@
+---
+title: "Principal Component Analysis"
+author: 
+  name: "Ricard Argelaguet"
+  affiliation: "European Bioinformatics Institute, Cambridge, UK"
+  email: "ricard@ebi.ac.uk"
+date: "`r Sys.Date()`"
+output:
+  BiocStyle::html_document:
+    toc: true
+    toc_depth: 2
+---
+
+# Load the data
+
+```{r, message = FALSE}
+library(ggplot2)
+library(tidyverse)
+library(ggpubr)
+```
+
+
+```{r}
+data(iris)
+head(iris)
+```
+
+```{r}
+Y <- iris[-5] %>% as.matrix %>% scale(center=TRUE, scale=FALSE)
+N <- nrow(Y)
+D <- ncol(Y)
+```
+
+# Compute PCA using the eigen decomposition of the covariance matrix
+
+Calculate covariance matrix
+```{r}
+S <- (t(Y)%*%Y) / (N-1)
+```
+
+Calculate the rank 2 [eigendecomposition](https://rpubs.com/aaronsc32/eigenvalues-eigenvectors-r) of the covariance matrix. In some resources they call this the rotation matrix. It corresponds to the feature weights of the matrix factorisation scheme
+```{r}
+eigenvectors <- eigen(S)$vectors[,c(1,2)]
+head(eigenvectors) 
+```
+
+Eigenvalues correspond to the standard deviation of the principal components
+```{r}
+eigenvalues <- eigen(S)$values[c(1,2)]
+head(sqrt(eigenvalues))
+```
+
+Multipling the original data by the eigenvectors projects the high-dimensional data onto the low-dimensional space (our principal components)
+```{r}
+PCs <- Y %*% eigenvectors
+head(PCs)
+```
+
+**(Q) How to interpret the Principal Components?**  
+Each Principal Component (PC) corresponds to an orthogonal axis of variation. Each PC is made up by a linear combination of the input features, where the linear coeficients are given by the feature weights. Each PC ordinates the samples along a one-dimensional axis centered at zero:
+```{r}
+df <- as.data.frame(PCs) %>% 
+  cbind(as.character(iris$Species)) %>%
+  `colnames<-`(c("PC1","PC2","species"))
+
+ggscatter(df, x="PC1", y="PC2", fill="species", shape=21 ,size=3) +
+  labs(x="Principal component 1", y="Principal component 2") +
+  theme(
+    legend.position = "right",
+    axis.text = element_text(size=rel(0.8))
+  )
+```
+
+# Compare our manual PCA to the standard `prcomp` 
+
+The standard way to perform Principal Component Analysis in R is to use the `prcomp` function. The underlying algorithm is slightly different (i.e. more numerically stable) than the eigenvector decomposition.
+
+```{r}
+prcomp.pca <- prcomp(Y, rank.=2)
+names(prcomp.pca)
+```
+
+`rotation` corresponds to the "weight matrix" (the matrix whose columns contain the eigenvectors)
+```{r}
+dim(prcomp.pca$rotation)
+head(prcomp.pca$rotation)
+```
+
+`x` corresponds to the principal components (the data multiplied by the rotation matrix)
+```{r}
+dim(prcomp.pca$x)
+head(prcomp.pca$x)
+```
+
+
+`sdev` contains the standard deviation explained by each PC
+```{r}
+prcomp.pca$sdev[1:2]
+```
+
+<!-- Rotate PCs for visualisation (ignore this) -->
+```{r echo=FALSE}
+prcomp.pca$x[,2] <- -(prcomp.pca$x[,2])
+prcomp.pca$rotation[,2] <- -(prcomp.pca$rotation[,2])
+```
+
+Plot the PCs
+```{r}
+df <- as.data.frame(prcomp.pca$x) %>% 
+  cbind(iris$Species) %>%
+  `colnames<-`(c("PC1","PC2","species"))
+
+ggscatter(df, x="PC1", y="PC2", fill="species", shape=21 ,size=3) +
+  labs(x="Principal component 1", y="Principal component 2") +
+  theme(
+    legend.position = "right",
+    axis.text = element_text(size=rel(0.8))
+  )
+```
+
+
+# Exploration of the feature weights
+
+The feature weights (also called loadings) provide a score for how strong each feature relates to each factor. Features with no linear association with the PC have values close to zero whereas features with strong association with the factor have large absolute values. The sign of the weight indicates the direction of the effect: a positive weight indicates that the feature has higher levels in the samples with positive factor values, and vice versa.
+
+```{r}
+to.plot <- prcomp.pca$rotation %>%
+  as.data.frame %>% tibble::rownames_to_column("feature") %>%
+  pivot_longer(cols=starts_with("PC"), names_to = "PC", values_to = "value")
+
+ggbarplot(to.plot, x="feature", y="value", facet="PC", fill="feature", position = position_dodge(0.9)) +
+  labs(x="", y="Loading") +
+  theme(
+    legend.position = "right",
+    legend.title = element_blank(),
+    axis.text.x = element_blank()
+  )
+```
+
+Sepal.Length has a positive loading for PC1. This means that the Sepal Length increases with increasing PC1 values (from negative to positive). In contrast, it has a loading of almost zero for PC4, which suggests that it has no influence on this source of variation. Let's check this:
+```{r}
+to.plot <- as.data.frame(prcomp.pca$x) %>%
+  mutate(sepal_length=iris$Sepal.Length) %>%
+  pivot_longer(cols=starts_with("PC"), names_to = "PC", values_to = "pc_value")
+  
+ggscatter(to.plot, x="pc_value", y="sepal_length", facet="PC", scales="free",
+  add="reg.line", add.params = list(color="blue", fill="lightgray"), conf.int=TRUE) +
+  stat_cor(method = "pearson") +
+  labs(x="PC value", y="Sepal length") +
+  theme(
+    axis.text = element_text(size=rel(0.8))
+  )
+```
+
+# Questions
+
+- **(Q) Why are the feature means not important when doing PCA (i.e. why is the data centered)?**  
+- **(Q) Does the PCA solution change if you scale the features with `scale(center=TRUE, scale=TRUE)`?**
+
+# Solutions
+
+### (Q) Why are the feature means not important when doing PCA (i.e. why is the data centered)?
+
+PCA exploits the patterns of covariation. The input to the eigenvalue decomposition is the covariance matrix where where the effect of means have been removed.
+
+### (Q) Does the PCA solution change if you scale the features with `scale(center=TRUE, scale=TRUE)`?
+
+Scaling does make a difference in PCA. Features with larger variance dominate the covariance matrix and hence tend to contribute more to the principal components. Data should be scaled when the differences in variance between the features are not considered biologically meaningful. In this case, if width and length were measured in different units then standarisation to unit variance would be a good idea.
+
+```{r}
+Y.scaled <- Y %>% scale(center=TRUE, scale=TRUE)
+```
+
+```{r}
+apply(Y,2,sd)
+apply(Y.scaled,2,sd)
+```
+
+```{r}
+pca.original <- prcomp(Y)
+pca.scaled <- prcomp(Y.scaled)
+```
+
+```{r}
+df.original <- pca.original$x %>%
+  as.data.frame %>%
+  mutate(sample=as.character(1:N)) %>%
+  mutate(type="original") %>%
+  pivot_longer(cols=starts_with("PC"), names_to = "PC", values_to = "value")
+
+df.scaled <- pca.scaled$x %>%
+  as.data.frame %>%
+  mutate(sample=as.character(1:N)) %>%
+  mutate(type="scaled") %>%
+  pivot_longer(cols=starts_with("PC"), names_to = "PC", values_to = "value")
+
+df <- rbind(df.original, df.scaled) %>%
+  pivot_wider(id_cols=c("sample","PC"), names_from="type", values_from="value")
+```
+
+```{r}
+ggscatter(df, x="original", y="scaled", facet="PC") +
+  labs(x="PCA with non-standarised data", y="PCA with standarised data") +
+  geom_abline(slope=1, intercept=0) +
+  theme(
+    legend.position = "right",
+    axis.text = element_text(size=rel(0.8))
+  )
+```
+

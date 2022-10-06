@@ -1,0 +1,25 @@
+
+# MAC
+*Icon*
+*.DS_Store
+
+# R stuff
+*.Rhistory
+*.rds
+.Rproj.user
+
+# output files
+*.log
+*.tsv
+
+# Ignore local folders
+**/local-data
+*.Rproj.user
+
+# Jupyter notebooks
+*.ipynb_checkpoints
+# *.ipynb
+
+
+# keynote files
+*.key
